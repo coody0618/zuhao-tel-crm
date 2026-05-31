@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0D1B3E">
+<title>足好貸｜電話行銷</title>
+<style>
+:root{
+  --navy:#0D1B3E; --navy2:#162040; --navy3:#1e2d55;
+  --gold:#C9A84C; --gold2:#F0D060;
+  --bg:#F0EDE6; --card:#FFFFFF;
+  --text:#1A1A2E; --muted:#6B7280; --border:#E5E1D8;
+  --green:#047857; --green-bg:#D1FAE5;
+  --red:#B91C1C; --red-bg:#FEE2E2;
+  --amber:#B45309; --amber-bg:#FEF3C7;
+  --blue:#1D4ED8; --blue-bg:#DBEAFE;
+  --purple:#6D28D9; --purple-bg:#EDE9FE;
+  --gray:#6B7280; --gray-bg:#F3F4F6;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);font-family:-apple-system,'Noto Sans TC',sans-serif;color:var(--text);overscroll-behavior:none;}
+
+/* ── 整體佈局 ── */
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+#topbar{
+  background:var(--navy);
+  padding:env(safe-area-inset-top,12px) 16px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+}
+.topbar-title{font-size:17px;font-weight:700;color:var(--gold);letter-spacing:1px;}
+.topbar-user{font-size:12px;color:rgba(201,168,76,0.7);}
+#content{flex:1;overflow-y:auto;padding-bottom:80px;}
+#navbar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--navy);
+  display:flex;
+  padding:0 0 env(safe-area-inset-bottom,0);
+  box-shadow:0 -2px 12px rgba(0,0,0,0.3);
+  z-index:100;
+}
+.nav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  padding:10px 0 8px;cursor:pointer;
+  transition:all .15s;color:rgba(201,168,76,0.45);
+  border:none;background:transparent;font-family:inherit;
+}
+.nav-item.active{color:var(--gold);}
+.nav-icon{font-size:22px;line-height:1;}
+.nav-label{font-size:10px;margin-top:3px;letter-spacing:0.5px;}
+
+/* ── 頁面 ── */
+.page{display:none;padding:16px;}
+.page.active{display:block;}
+
+/* ── 統計橫幅 ── */
+.stats-bar{
+  background:var(--navy);border-radius:14px;
+  padding:14px 16px;margin-bottom:16px;
+  display:flex;justify-content:space-around;
+}
+.stat-item{text-align:center;}
+.stat-num{font-size:24px;font-weight:800;color:var(--gold);line-height:1;}
+.stat-label{font-size:10px;color:rgba(201,168,76,0.6);margin-top:3px;letter-spacing:0.5px;}
+
+/* ── 客戶卡片 ── */
+.client-card{
+  background:var(--card);border-radius:16px;margin-bottom:12px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.06);overflow:hidden;
+  border:1px solid var(--border);
+}
+.client-card-header{
+  padding:14px 16px 10px;
+  display:flex;justify-content:space-between;align-items:flex-start;
+}
+.client-name{font-size:18px;font-weight:700;color:var(--text);}
+.client-phone{font-size:14px;color:var(--muted);margin-top:2px;}
+.client-meta{font-size:11px;color:var(--muted);margin-top:4px;}
+.client-badge{
+  font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;
+  white-space:nowrap;flex-shrink:0;
+}
+.badge-新客戶{background:var(--blue-bg);color:var(--blue);}
+.badge-追蹤中{background:var(--amber-bg);color:var(--amber);}
+.badge-有興趣{background:var(--green-bg);color:var(--green);}
+.badge-拒絕{background:var(--red-bg);color:var(--red);}
+.badge-黑名單{background:var(--gray-bg);color:var(--gray);}
+.badge-借款人{background:var(--purple-bg);color:var(--purple);}
+.badge-金主{background:var(--green-bg);color:var(--green);}
+
+/* 撥打按鈕 */
+.call-btn{
+  width:100%;padding:14px;
+  background:linear-gradient(135deg,var(--navy),var(--navy2));
+  color:var(--gold);border:none;font-size:16px;font-weight:700;
+  letter-spacing:1px;cursor:pointer;font-family:inherit;
+  transition:all .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.call-btn:active{background:var(--navy3);}
+
+/* 結果按鈕 6 宮格 */
+.result-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:var(--border);border-top:1px solid var(--border);
+}
+.result-btn{
+  padding:14px 4px;border:none;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  font-family:inherit;transition:all .1s;background:var(--card);
+}
+.result-btn:active{filter:brightness(0.92);}
+.result-emoji{font-size:22px;line-height:1;}
+.result-label{font-size:11px;font-weight:600;color:var(--text);}
+.result-interested{background:var(--green-bg)!important;}
+.result-booked{background:var(--blue-bg)!important;}
+.result-missed{background:var(--amber-bg)!important;}
+.result-followup{background:var(--purple-bg)!important;}
+.result-refused{background:var(--red-bg)!important;}
+.result-blacklist{background:var(--gray-bg)!important;}
+
+/* ── 空狀態 ── */
+.empty{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty-icon{font-size:52px;margin-bottom:12px;}
+.empty-text{font-size:15px;}
+
+/* ── 搜尋列 ── */
+.search-row{display:flex;gap:8px;margin-bottom:14px;align-items:center;}
+.search-input{
+  flex:1;padding:11px 14px;border:1.5px solid var(--border);
+  border-radius:12px;font-size:15px;background:var(--card);
+  font-family:inherit;color:var(--text);
+  -webkit-appearance:none;
+}
+.search-input:focus{outline:none;border-color:var(--gold);}
+.filter-btn{
+  padding:11px 14px;border:1.5px solid var(--border);
+  border-radius:12px;background:var(--card);font-size:13px;
+  cursor:pointer;font-family:inherit;color:var(--text);
+  white-space:nowrap;-webkit-appearance:none;
+}
+.filter-btn.active{border-color:var(--navy);background:var(--navy);color:var(--gold);}
+
+/* ── 清單項目（名單頁用）── */
+.list-item{
+  background:var(--card);border-radius:14px;margin-bottom:10px;
+  padding:14px 16px;border:1px solid var(--border);
+  box-shadow:0 1px 6px rgba(0,0,0,0.04);
+  cursor:pointer;transition:all .1s;
+}
+.list-item:active{transform:scale(0.98);}
+.list-row{display:flex;justify-content:space-between;align-items:center;}
+.list-name{font-size:16px;font-weight:600;}
+.list-phone{font-size:13px;color:var(--muted);margin-top:3px;}
+.list-meta{font-size:11px;color:var(--muted);margin-top:5px;}
+
+/* ── FAB 新增按鈕 ── */
+.fab{
+  position:fixed;right:20px;bottom:90px;
+  width:56px;height:56px;border-radius:50%;
+  background:var(--gold);color:var(--navy);
+  border:none;font-size:26px;cursor:pointer;
+  box-shadow:0 4px 20px rgba(201,168,76,0.5);
+  display:flex;align-items:center;justify-content:center;
+  z-index:90;transition:all .15s;
+}
+.fab:active{transform:scale(0.92);}
+
+/* ── Modal ── */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,0.55);
+  z-index:200;display:none;align-items:flex-end;
+  backdrop-filter:blur(4px);
+}
+.modal-bg.open{display:flex;}
+.modal{
+  background:var(--card);border-radius:24px 24px 0 0;
+  padding:20px 20px calc(20px + env(safe-area-inset-bottom,0));
+  width:100%;max-height:90vh;overflow-y:auto;
+}
+.modal-handle{
+  width:40px;height:4px;background:var(--border);
+  border-radius:2px;margin:0 auto 18px;
+}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:16px;color:var(--navy);}
+
+/* 表單 */
+.form-group{margin-bottom:14px;}
+.form-label{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0.5px;margin-bottom:5px;display:block;}
+.form-input,.form-select,.form-textarea{
+  width:100%;padding:12px 14px;border:1.5px solid var(--border);
+  border-radius:12px;font-size:15px;font-family:inherit;
+  background:var(--bg);color:var(--text);-webkit-appearance:none;
+}
+.form-input:focus,.form-select:focus,.form-textarea:focus{
+  outline:none;border-color:var(--gold);background:var(--card);
+}
+.form-textarea{min-height:80px;resize:vertical;}
+
+/* 按鈕 */
+.btn{
+  width:100%;padding:15px;border:none;border-radius:14px;
+  font-size:16px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:all .1s;
+}
+.btn-primary{background:var(--navy);color:var(--gold);}
+.btn-primary:active{background:var(--navy2);}
+.btn-gold{background:var(--gold);color:var(--navy);}
+.btn-gold:active{background:var(--gold2);}
+.btn-danger{background:var(--red-bg);color:var(--red);}
+.btn-sm{padding:10px 18px;width:auto;font-size:14px;border-radius:10px;}
+
+/* 備注 modal */
+.note-modal{border-radius:20px;padding:20px;background:var(--card);}
+.note-modal .modal-title{font-size:16px;margin-bottom:12px;}
+
+/* ── 統計頁 ── */
+.stats-section{margin-bottom:20px;}
+.stats-section-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:10px;}
+.stats-card{
+  background:var(--card);border-radius:14px;padding:16px;
+  border:1px solid var(--border);
+}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;}
+.stats-num{font-size:28px;font-weight:800;color:var(--navy);}
+.stats-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* 日期橫條圖 */
+.bar-chart{display:flex;gap:6px;align-items:flex-end;height:80px;padding:8px 0;}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.bar{width:100%;border-radius:4px 4px 0 0;background:var(--navy);min-height:4px;transition:height .3s;}
+.bar-reach{background:var(--gold);}
+.bar-date{font-size:9px;color:var(--muted);}
+.bar-legend{display:flex;gap:12px;justify-content:center;margin-top:8px;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+/* 排行榜 */
+.rank-item{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 0;border-bottom:1px solid var(--border);
+}
+.rank-item:last-child{border-bottom:none;}
+.rank-num{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--navy);color:var(--gold);
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.rank-name{font-weight:600;font-size:15px;flex:1;}
+.rank-nums{text-align:right;font-size:12px;color:var(--muted);}
+
+/* 登入頁 */
+#login-page{
+  position:fixed;inset:0;background:var(--navy);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px;z-index:999;
+}
+.login-logo{font-size:48px;margin-bottom:8px;}
+.login-title{font-size:28px;font-weight:900;color:var(--gold);letter-spacing:2px;margin-bottom:4px;}
+.login-sub{font-size:13px;color:rgba(201,168,76,0.6);margin-bottom:40px;letter-spacing:1px;}
+.login-form{width:100%;max-width:340px;}
+.login-input{
+  width:100%;padding:15px 18px;border:1.5px solid rgba(201,168,76,0.3);
+  border-radius:14px;background:rgba(255,255,255,0.08);
+  color:#fff;font-size:16px;font-family:inherit;
+  margin-bottom:12px;-webkit-appearance:none;
+}
+.login-input::placeholder{color:rgba(255,255,255,0.4);}
+.login-input:focus{outline:none;border-color:var(--gold);}
+.login-btn{
+  width:100%;padding:16px;background:var(--gold);color:var(--navy);
+  border:none;border-radius:14px;font-size:17px;font-weight:800;
+  cursor:pointer;font-family:inherit;letter-spacing:1px;
+}
+.login-hint{color:rgba(201,168,76,0.5);font-size:11px;text-align:center;margin-top:20px;}
+.login-err{color:#ff6b6b;font-size:13px;text-align:center;margin-bottom:12px;min-height:20px;}
+
+/* 通話記錄 */
+.call-record{
+  padding:10px 14px;border-radius:10px;margin-bottom:8px;
+  font-size:13px;
+}
+.call-record-time{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* ── 日期輸入彈窗 ── */
+#date-modal{text-align:center;}
+#date-modal h3{font-size:17px;font-weight:700;margin-bottom:16px;}
+#date-input{
+  padding:13px;border:1.5px solid var(--border);
+  border-radius:12px;font-size:16px;width:100%;text-align:center;
+  font-family:inherit;color:var(--text);background:var(--bg);
+  -webkit-appearance:none;
+}
+</style>
+</head>
+<body>
+
+<!-- ── 登入頁 ── -->
+<div id="login-page">
+  <div class="login-logo">📞</div>
+  <div class="login-title">足好貸</div>
+  <div class="login-sub">電話行銷管理系統</div>
+  <div class="login-form">
+    <div class="login-err" id="login-err"></div>
+    <input class="login-input" id="login-user" type="text" placeholder="帳號" autocomplete="username">
+    <input class="login-input" id="login-pw" type="password" placeholder="密碼" autocomplete="current-password">
+    <button class="login-btn" onclick="doLogin()">登入</button>
+    <div class="login-hint">admin / admin1234 &nbsp;|&nbsp; sales1-3 / sales1234</div>
+  </div>
+</div>
+
+<!-- ── 主介面 ── -->
+<div id="app" style="display:none;">
+  <div id="topbar">
+    <div>
+      <div class="topbar-title">📞 足好貸 行銷</div>
+      <div class="topbar-user" id="topbar-user"></div>
+    </div>
+    <button class="btn btn-sm" style="background:transparent;border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 14px;width:auto;font-size:12px;" onclick="doLogout()">登出</button>
+  </div>
+
+  <div id="content">
+    <!-- 今日工作台 -->
+    <div class="page active" id="page-today">
+      <div class="stats-bar" id="today-stats">
+        <div class="stat-item"><div class="stat-num" id="s-total">0</div><div class="stat-label">已撥</div></div>
+        <div class="stat-item"><div class="stat-num" id="s-reach">0</div><div class="stat-label">接通</div></div>
+        <div class="stat-item"><div class="stat-num" id="s-rate">0%</div><div class="stat-label">接通率</div></div>
+        <div class="stat-item"><div class="stat-num" id="s-inter">0</div><div class="stat-label">有興趣</div></div>
+      </div>
+      <div id="today-list"></div>
+    </div>
+
+    <!-- 客戶名單 -->
+    <div class="page" id="page-clients">
+      <div class="search-row">
+        <input class="search-input" id="search-q" placeholder="搜尋姓名或電話…" oninput="searchClients()">
+        <select class="filter-btn" id="filter-type" onchange="searchClients()" style="max-width:100px;">
+          <option value="">全部</option>
+          <option value="借款人">借款人</option>
+          <option value="金主">金主</option>
+          <option value="待分類">待分類</option>
+        </select>
+      </div>
+      <div id="clients-list"></div>
+      <div id="clients-more" style="text-align:center;padding:16px 0;display:none;">
+        <button class="btn btn-sm" style="background:var(--navy);color:var(--gold);width:auto;" onclick="loadMoreClients()">載入更多</button>
+      </div>
+    </div>
+
+    <!-- 業績統計 -->
+    <div class="page" id="page-stats">
+      <div id="stats-content"></div>
+    </div>
+  </div>
+
+  <nav id="navbar">
+    <button class="nav-item active" id="nav-today" onclick="switchPage('today')">
+      <span class="nav-icon">📞</span>
+      <span class="nav-label">工作台</span>
+    </button>
+    <button class="nav-item" id="nav-clients" onclick="switchPage('clients')">
+      <span class="nav-icon">👥</span>
+      <span class="nav-label">名單</span>
+    </button>
+    <button class="nav-item" id="nav-stats" onclick="switchPage('stats')">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">業績</span>
+    </button>
+  </nav>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fab-add" onclick="openAddModal()" style="display:none;">＋</button>
+
+<!-- ── Modal：備注 ── -->
+<div class="modal-bg" id="note-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="note-modal-title">記錄通話結果</div>
+    <div class="form-group">
+      <label class="form-label">備注（選填）</label>
+      <textarea class="form-textarea" id="note-text" placeholder="例：有房子需要100萬，下週再打…"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="confirmResult()">確認記錄</button>
+    <div style="height:10px;"></div>
+    <button class="btn" style="background:var(--gray-bg);color:var(--muted);" onclick="closeModal('note-modal')">取消</button>
+  </div>
+</div>
+
+<!-- ── Modal：選日期 ── -->
+<div class="modal-bg" id="date-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="date-modal" style="text-align:center;">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;">選擇回電日期</h3>
+      <input type="date" id="date-input" class="form-input" style="text-align:center;font-size:16px;">
+      <div style="height:14px;"></div>
+      <button class="btn btn-gold" onclick="confirmDate()">確認</button>
+      <div style="height:10px;"></div>
+      <button class="btn" style="background:var(--gray-bg);color:var(--muted);" onclick="closeModal('date-modal-bg')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal：新增客戶 ── -->
+<div class="modal-bg" id="add-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">新增客戶</div>
+    <div class="form-group">
+      <label class="form-label">姓名 *</label>
+      <input class="form-input" id="add-name" placeholder="王大明">
+    </div>
+    <div class="form-group">
+      <label class="form-label">電話 *</label>
+      <input class="form-input" id="add-phone" type="tel" placeholder="0912-345-678">
+    </div>
+    <div class="form-group">
+      <label class="form-label">類型</label>
+      <select class="form-select" id="add-type">
+        <option value="待分類">待分類</option>
+        <option value="借款人">借款人</option>
+        <option value="金主">金主</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">來源</label>
+      <select class="form-select" id="add-source">
+        <option value="台灣房屋開發">台灣房屋開發</option>
+        <option value="FB留言">FB留言</option>
+        <option value="轉介紹">轉介紹</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">地區</label>
+      <input class="form-input" id="add-region" placeholder="台北市、新北市…">
+    </div>
+    <div class="form-group">
+      <label class="form-label">備注</label>
+      <textarea class="form-textarea" id="add-note" placeholder=""></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="submitAdd()">新增</button>
+    <div style="height:10px;"></div>
+    <button class="btn" style="background:var(--gray-bg);color:var(--muted);" onclick="closeModal('add-modal')">取消</button>
+  </div>
+</div>
+
+<!-- ── Modal：客戶詳情 ── -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- ── Modal：CSV匯入 ── -->
+<div class="modal-bg" id="import-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📥 CSV 匯入</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">CSV 欄位：姓名、電話、類型、來源、地區、備注</p>
+    <input type="file" id="csv-file" accept=".csv" style="margin-bottom:14px;width:100%;">
+    <button class="btn btn-gold" onclick="submitImport()">匯入</button>
+    <div style="height:10px;"></div>
+    <button class="btn" style="background:var(--gray-bg);color:var(--muted);" onclick="closeModal('import-modal')">取消</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+// 狀態
+// ════════════════════════════════════════════════
+let currentUser = null;
+let currentPage = 'today';
+let pendingResult = null;
+let pendingClientId = null;
+let clientsPage = 1;
+let clientsTotal = 0;
+
+// ════════════════════════════════════════════════
+// API
+// ════════════════════════════════════════════════
+async function api(method, path, data) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
+  if (data) opts.body = JSON.stringify(data);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+// ════════════════════════════════════════════════
+// 登入 / 登出
+// ════════════════════════════════════════════════
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pw').value;
+  const r = await api('POST', '/api/login', { username, password });
+  if (r.error) { document.getElementById('login-err').textContent = r.error; return; }
+  currentUser = r;
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('fab-add').style.display = 'flex';
+  document.getElementById('topbar-user').textContent = r.name + '　' + (r.role === 'admin' ? '👑 管理者' : '業務員');
+  loadToday();
+}
+
+async function doLogout() {
+  await api('POST', '/api/logout');
+  location.reload();
+}
+
+document.getElementById('login-pw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// ════════════════════════════════════════════════
+// 頁面切換
+// ════════════════════════════════════════════════
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  currentPage = name;
+  if (name === 'today')   loadToday();
+  if (name === 'clients') { clientsPage=1; loadClients(); }
+  if (name === 'stats')   loadStats();
+  document.getElementById('fab-add').style.display = name === 'clients' ? 'flex' : 'none';
+}
+
+// ════════════════════════════════════════════════
+// 今日工作台
+// ════════════════════════════════════════════════
+async function loadToday() {
+  const r = await api('GET', '/api/today');
+  const s = r.stats;
+  document.getElementById('s-total').textContent = s.total;
+  document.getElementById('s-reach').textContent = s.reach;
+  document.getElementById('s-rate').textContent  = s.rate + '%';
+  document.getElementById('s-inter').textContent = s.interested;
+
+  const list = document.getElementById('today-list');
+  if (!r.clients.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">今日名單已完成！<br>休息一下或前往名單頁新增</div></div>`;
+    return;
+  }
+  list.innerHTML = r.clients.map(c => clientCard(c)).join('');
+}
+
+function clientCard(c) {
+  const badge = `<span class="client-badge badge-${c.status}">${c.status}</span>`;
+  const typeBadge = c.type !== '待分類' ? `<span class="client-badge badge-${c.type}" style="margin-left:6px;">${c.type}</span>` : '';
+  const meta = [c.region, c.source, c.next_follow ? '📅 ' + c.next_follow : ''].filter(Boolean).join('　');
+  return `
+  <div class="client-card">
+    <div class="client-card-header">
+      <div>
+        <div class="client-name">${c.name}</div>
+        <div class="client-phone">${c.phone}</div>
+        ${meta ? `<div class="client-meta">${meta}</div>` : ''}
+        <div style="margin-top:6px;">${badge}${typeBadge}</div>
+      </div>
+      <div style="text-align:right;display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+        <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;" onclick="openDetail(${c.id})">詳情</button>
+      </div>
+    </div>
+    <button class="call-btn" onclick="makeCall('${c.phone}',${c.id})">
+      📞 撥打 ${c.phone}
+    </button>
+    <div class="result-grid">
+      <button class="result-btn result-interested" onclick="selectResult(${c.id},'有興趣')">
+        <span class="result-emoji">✅</span>
+        <span class="result-label">有興趣</span>
+      </button>
+      <button class="result-btn result-booked" onclick="selectResult(${c.id},'約回電')">
+        <span class="result-emoji">📅</span>
+        <span class="result-label">約回電</span>
+      </button>
+      <button class="result-btn result-missed" onclick="selectResult(${c.id},'未接')">
+        <span class="result-emoji">📵</span>
+        <span class="result-label">未接</span>
+      </button>
+      <button class="result-btn result-followup" onclick="selectResult(${c.id},'再跟進')">
+        <span class="result-emoji">🔄</span>
+        <span class="result-label">再跟進</span>
+      </button>
+      <button class="result-btn result-refused" onclick="selectResult(${c.id},'拒絕')">
+        <span class="result-emoji">❌</span>
+        <span class="result-label">拒絕</span>
+      </button>
+      <button class="result-btn result-blacklist" onclick="selectResult(${c.id},'黑名單')">
+        <span class="result-emoji">🚫</span>
+        <span class="result-label">黑名單</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function makeCall(phone, id) {
+  window.location.href = 'tel:' + phone.replace(/-/g,'');
+}
+
+function selectResult(clientId, result) {
+  pendingClientId = clientId;
+  pendingResult   = result;
+  if (result === '約回電' || result === '再跟進') {
+    // 需要選日期
+    const today = new Date();
+    today.setDate(today.getDate()+1);
+    document.getElementById('date-input').value = today.toISOString().split('T')[0];
+    document.getElementById('date-modal-bg') ?
+      document.getElementById('date-modal-bg').classList.add('open') :
+      (() => {
+        const bg = document.createElement('div');
+        bg.className='modal-bg open';bg.id='date-modal-bg';
+        bg.innerHTML=`<div class="modal">
+          <div class="modal-handle"></div>
+          <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;text-align:center;">${result === '約回電' ? '📅 選擇回電日期' : '🔄 選擇跟進日期'}</h3>
+          <input type="date" id="date-input2" class="form-input" style="text-align:center;font-size:16px;" value="${document.getElementById('date-input').value}">
+          <div style="height:14px;"></div>
+          <button class="btn btn-gold" onclick="confirmDate2()">確認</button>
+          <div style="height:10px;"></div>
+          <button class="btn" style="background:var(--gray-bg);color:var(--muted);" onclick="this.closest('.modal-bg').remove()">取消</button>
+        </div>`;
+        document.body.appendChild(bg);
+      })();
+    return;
+  }
+  document.getElementById('note-modal-title').textContent = resultLabel(result);
+  document.getElementById('note-text').value = '';
+  document.getElementById('note-modal').classList.add('open');
+}
+
+function resultLabel(r){
+  const m={'有興趣':'✅ 有興趣','未接':'📵 未接','拒絕':'❌ 拒絕','黑名單':'🚫 黑名單'};
+  return m[r]||r;
+}
+
+async function confirmDate2() {
+  const d = document.getElementById('date-input2').value;
+  document.getElementById('date-modal-bg')?.remove();
+  document.getElementById('note-modal-title').textContent = resultLabel(pendingResult) + ' — ' + d;
+  document.getElementById('note-text').value = '';
+  document.getElementById('note-modal').classList.add('open');
+  window._pendingDate = d;
+}
+
+async function confirmResult() {
+  const note = document.getElementById('note-text').value;
+  const data = { client_id: pendingClientId, result: pendingResult, note, next_date: window._pendingDate||'' };
+  window._pendingDate = '';
+  closeModal('note-modal');
+  await api('POST', '/api/call', data);
+  await loadToday();
+}
+
+// ════════════════════════════════════════════════
+// 客戶名單
+// ════════════════════════════════════════════════
+let searchTimer = null;
+function searchClients() {
+  clientsPage = 1;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadClients, 300);
+}
+
+async function loadClients() {
+  const q    = document.getElementById('search-q').value;
+  const type = document.getElementById('filter-type').value;
+  const r    = await api('GET', `/api/clients?q=${encodeURIComponent(q)}&type=${type}&page=${clientsPage}`);
+  clientsTotal = r.total;
+  const list = document.getElementById('clients-list');
+  const html = r.clients.map(c => `
+    <div class="list-item" onclick="openDetail(${c.id})">
+      <div class="list-row">
+        <div class="list-name">${c.name}</div>
+        <span class="client-badge badge-${c.status}" style="font-size:10px;">${c.status}</span>
+      </div>
+      <div class="list-phone">${c.phone}</div>
+      <div class="list-meta">
+        ${c.type !== '待分類' ? `<span class="client-badge badge-${c.type}" style="font-size:10px;padding:2px 8px;">${c.type}</span>　` : ''}
+        ${c.region||''}　${c.source||''}
+        ${c.next_follow ? '　📅 '+c.next_follow : ''}
+      </div>
+    </div>`).join('');
+
+  if (clientsPage === 1) {
+    list.innerHTML = html || `<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">尚無客戶資料<br>點 ＋ 新增或匯入 CSV</div></div>`;
+  } else {
+    list.insertAdjacentHTML('beforeend', html);
+  }
+  const moreBtn = document.getElementById('clients-more');
+  moreBtn.style.display = (r.clients.length === 20 && clientsPage * 20 < clientsTotal) ? 'block' : 'none';
+}
+
+function loadMoreClients() { clientsPage++; loadClients(); }
+
+// ════════════════════════════════════════════════
+// 客戶詳情
+// ════════════════════════════════════════════════
+async function openDetail(id) {
+  const r = await api('GET', `/api/clients/${id}`);
+  const c = r.client;
+  const calls = r.calls;
+  const resultColors = {
+    '有興趣':'var(--green-bg)','約回電':'var(--blue-bg)',
+    '未接':'var(--amber-bg)','再跟進':'var(--purple-bg)',
+    '拒絕':'var(--red-bg)','黑名單':'var(--gray-bg)'
+  };
+  document.getElementById('detail-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="modal-title" style="margin-bottom:0;">${c.name}</div>
+      <button class="btn btn-sm btn-primary" onclick="closeModal('detail-modal')" style="width:auto;">關閉</button>
+    </div>
+    <div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+        <div><span style="color:var(--muted);">電話　</span><strong>${c.phone}</strong></div>
+        <div><span style="color:var(--muted);">類型　</span><strong>${c.type}</strong></div>
+        <div><span style="color:var(--muted);">狀態　</span><strong>${c.status}</strong></div>
+        <div><span style="color:var(--muted);">地區　</span><strong>${c.region||'—'}</strong></div>
+        <div><span style="color:var(--muted);">來源　</span><strong>${c.source||'—'}</strong></div>
+        <div><span style="color:var(--muted);">下次　</span><strong>${c.next_follow||'—'}</strong></div>
+      </div>
+      ${c.note ? `<div style="margin-top:10px;font-size:13px;color:var(--muted);">備注：${c.note}</div>` : ''}
+    </div>
+    <button class="btn" style="background:var(--navy);color:var(--gold);margin-bottom:14px;" onclick="makeCall('${c.phone}',${c.id})">📞 撥打 ${c.phone}</button>
+    <div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">通話記錄（${calls.length}）</div>
+    ${calls.length ? calls.map(cl=>`
+      <div class="call-record" style="background:${resultColors[cl.result]||'var(--gray-bg)'};">
+        <strong>${cl.result}</strong>　${cl.sales_name||''}
+        ${cl.note ? `<div style="margin-top:4px;font-size:12px;">${cl.note}</div>` : ''}
+        <div class="call-record-time">${cl.called_at}</div>
+      </div>`).join('') : '<div style="color:var(--muted);font-size:13px;">尚無通話記錄</div>'}
+  `;
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+// ════════════════════════════════════════════════
+// 新增客戶
+// ════════════════════════════════════════════════
+function openAddModal() {
+  ['add-name','add-phone','add-region','add-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('add-modal').classList.add('open');
+}
+async function submitAdd() {
+  const name  = document.getElementById('add-name').value.trim();
+  const phone = document.getElementById('add-phone').value.trim();
+  if (!name||!phone) { alert('請填寫姓名和電話'); return; }
+  await api('POST','/api/clients',{
+    name, phone,
+    type:   document.getElementById('add-type').value,
+    source: document.getElementById('add-source').value,
+    region: document.getElementById('add-region').value,
+    note:   document.getElementById('add-note').value,
+  });
+  closeModal('add-modal');
+  loadClients();
+}
+
+// ════════════════════════════════════════════════
+// CSV 匯入
+// ════════════════════════════════════════════════
+async function submitImport() {
+  const f = document.getElementById('csv-file').files[0];
+  if (!f) { alert('請選擇 CSV 檔案'); return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/import', { method:'POST', body:fd, credentials:'include' });
+  const d = await r.json();
+  closeModal('import-modal');
+  alert(`匯入完成：${d.count} 筆`);
+  loadClients();
+}
+
+// ════════════════════════════════════════════════
+// 業績統計
+// ════════════════════════════════════════════════
+async function loadStats() {
+  const r = await api('GET', '/api/stats');
+  const s = r.stats;
+  const daily = r.daily;
+  const ranking = r.ranking;
+  const maxTotal = Math.max(...daily.map(d=>d.total), 1);
+
+  const rankHTML = ranking.length ? ranking.map((u,i)=>`
+    <div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-name">${u.name}</div>
+      <div class="rank-nums">
+        撥打 ${u.total}　接通 ${u.reach}　有興趣 ${u.interested}
+      </div>
+    </div>`).join('') : '';
+
+  document.getElementById('stats-content').innerHTML = `
+    <div class="stats-section">
+      <div class="stats-section-title">今日</div>
+      <div class="stats-card">
+        <div class="stats-row">
+          <div><div class="stats-num" style="color:var(--navy);">${s.today.total}</div><div class="stats-sub">已撥通</div></div>
+          <div><div class="stats-num" style="color:var(--gold);">${s.today.reach}</div><div class="stats-sub">接通</div></div>
+          <div><div class="stats-num" style="color:var(--green);">${s.today.interested}</div><div class="stats-sub">有興趣</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);">
+          接通率 ${s.today.total ? Math.round(s.today.reach/s.today.total*100) : 0}%　
+          約訪 ${s.today.booked} 通
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-section">
+      <div class="stats-section-title">本週</div>
+      <div class="stats-card">
+        <div class="stats-row">
+          <div><div class="stats-num">${s.week.total}</div><div class="stats-sub">已撥通</div></div>
+          <div><div class="stats-num" style="color:var(--gold);">${s.week.reach}</div><div class="stats-sub">接通</div></div>
+          <div><div class="stats-num" style="color:var(--green);">${s.week.interested}</div><div class="stats-sub">有興趣</div></div>
+        </div>
+        <div class="bar-chart">
+          ${daily.map(d=>`
+            <div class="bar-wrap">
+              <div style="position:relative;flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;">
+                <div class="bar" style="height:${Math.round((d.reach/maxTotal)*70)}px;background:var(--gold);"></div>
+                <div class="bar" style="height:${Math.round(((d.total-d.reach)/maxTotal)*70)}px;"></div>
+              </div>
+              <div class="bar-date">${d.date.slice(5)}</div>
+            </div>`).join('')}
+        </div>
+        <div class="bar-legend">
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
+            <div class="legend-dot" style="background:var(--navy);"></div>未接
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
+            <div class="legend-dot" style="background:var(--gold);"></div>接通
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${ranking.length ? `
+    <div class="stats-section">
+      <div class="stats-section-title">今日團隊排行</div>
+      <div class="stats-card">${rankHTML}</div>
+    </div>` : ''}
+
+    <div style="text-align:center;padding:8px 0;">
+      <button class="btn btn-sm" style="background:var(--navy);color:var(--gold);width:auto;" onclick="openModal('import-modal')">
+        📥 匯入 CSV 名單
+      </button>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════
+// 工具
+// ════════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+  pendingResult = null; pendingClientId = null; window._pendingDate = '';
+}
+// 點背景關閉
+document.querySelectorAll('.modal-bg').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open'); });
+});
+
+// 初始載入：確認是否已登入
+(async () => {
+  const r = await api('GET', '/api/me').catch(()=>null);
+  if (r && r.id) {
+    currentUser = r;
+    document.getElementById('login-page').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('fab-add').style.display='flex';
+    document.getElementById('topbar-user').textContent = r.name + '　' + (r.role==='admin'?'👑 管理者':'業務員');
+    loadToday();
+  }
+})();
+</script>
+</body>
+</html>
