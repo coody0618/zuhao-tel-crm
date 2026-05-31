@@ -425,4 +425,20 @@ def stats():
 @login_required
 def users():
     if session['role'] != 'admin':
-        return jsonify(
+        return jsonify({'error': '權限不足'}), 403
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id,username,name,role FROM users ORDER BY id")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify({'users': [dict(r) for r in rows]})
+
+# ── 主頁（Single Page App）──────────────────────────
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def index(path):
+    return send_from_directory('.', 'index.html')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
