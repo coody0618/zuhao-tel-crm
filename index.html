@@ -875,4 +875,157 @@ async function quickSetGrade(id, grade) {
 }
 
 async function quickSetFollowDate(id) {
-  const d = document.getElementById('de
+  const d = document.getElementById('detail-follow-date').value;
+  await api('PATCH', `/api/clients/${id}/grade`, { intent_grade: '', follow_date: d });
+  // 同步更新 next_follow
+  const r = await api('GET', `/api/clients/${id}`);
+  await api('PUT', `/api/clients/${id}`, { ...r.client, next_follow: d });
+  openDetail(id);
+  if (document.getElementById('today-list')) loadToday();
+}
+
+async function toggleDNC(id, current) {
+  const newDNC = !current;
+  const r = await api('GET', `/api/clients/${id}`);
+  await api('PUT', `/api/clients/${id}`, { ...r.client, dnc: newDNC });
+  openDetail(id);
+  if (document.getElementById('today-list')) loadToday();
+}
+
+// ════════════════════════════════════════════════
+async function submitAdd() {
+  const name  = document.getElementById('add-name').value.trim();
+  const phone = document.getElementById('add-phone').value.trim();
+  if (!name||!phone) { alert('請填寫姓名和電話'); return; }
+  await api('POST','/api/clients',{
+    name, phone,
+    type:   document.getElementById('add-type').value,
+    source: document.getElementById('add-source').value,
+    region: document.getElementById('add-region').value,
+    note:   document.getElementById('add-note').value,
+  });
+  closeModal('add-modal');
+  loadClients();
+}
+
+// ════════════════════════════════════════════════
+// CSV 匯入
+// ════════════════════════════════════════════════
+async function submitImport() {
+  const f = document.getElementById('csv-file').files[0];
+  if (!f) { alert('請選擇 CSV 檔案'); return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/import', { method:'POST', body:fd, credentials:'include' });
+  const d = await r.json();
+  closeModal('import-modal');
+  alert(`匯入完成：${d.count} 筆`);
+  loadClients();
+}
+
+// ════════════════════════════════════════════════
+// 業績統計
+// ════════════════════════════════════════════════
+async function loadStats() {
+  const r = await api('GET', '/api/stats');
+  const s = r.stats;
+  const daily = r.daily;
+  const ranking = r.ranking;
+  const maxTotal = Math.max(...daily.map(d=>d.total), 1);
+
+  const rankHTML = ranking.length ? ranking.map((u,i)=>`
+    <div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-name">${u.name}</div>
+      <div class="rank-nums">
+        撥打 ${u.total}　接通 ${u.reach}　有興趣 ${u.interested}
+      </div>
+    </div>`).join('') : '';
+
+  document.getElementById('stats-content').innerHTML = `
+    <div class="stats-section">
+      <div class="stats-section-title">今日</div>
+      <div class="stats-card">
+        <div class="stats-row">
+          <div><div class="stats-num" style="color:var(--navy);">${s.today.total}</div><div class="stats-sub">已撥通</div></div>
+          <div><div class="stats-num" style="color:var(--gold);">${s.today.reach}</div><div class="stats-sub">接通</div></div>
+          <div><div class="stats-num" style="color:var(--green);">${s.today.interested}</div><div class="stats-sub">有興趣</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);">
+          接通率 ${s.today.total ? Math.round(s.today.reach/s.today.total*100) : 0}%　
+          約訪 ${s.today.booked} 通
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-section">
+      <div class="stats-section-title">本週</div>
+      <div class="stats-card">
+        <div class="stats-row">
+          <div><div class="stats-num">${s.week.total}</div><div class="stats-sub">已撥通</div></div>
+          <div><div class="stats-num" style="color:var(--gold);">${s.week.reach}</div><div class="stats-sub">接通</div></div>
+          <div><div class="stats-num" style="color:var(--green);">${s.week.interested}</div><div class="stats-sub">有興趣</div></div>
+        </div>
+        <div class="bar-chart">
+          ${daily.map(d=>`
+            <div class="bar-wrap">
+              <div style="position:relative;flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;">
+                <div class="bar" style="height:${Math.round((d.reach/maxTotal)*70)}px;background:var(--gold);"></div>
+                <div class="bar" style="height:${Math.round(((d.total-d.reach)/maxTotal)*70)}px;"></div>
+              </div>
+              <div class="bar-date">${d.date.slice(5)}</div>
+            </div>`).join('')}
+        </div>
+        <div class="bar-legend">
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
+            <div class="legend-dot" style="background:var(--navy);"></div>未接
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
+            <div class="legend-dot" style="background:var(--gold);"></div>接通
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${ranking.length ? `
+    <div class="stats-section">
+      <div class="stats-section-title">今日團隊排行</div>
+      <div class="stats-card">${rankHTML}</div>
+    </div>` : ''}
+
+    <div style="text-align:center;padding:8px 0;">
+      <button class="btn btn-sm" style="background:var(--navy);color:var(--gold);width:auto;" onclick="openModal('import-modal')">
+        📥 匯入 CSV 名單
+      </button>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════
+// 工具
+// ════════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+  pendingResult = null; pendingClientId = null; window._pendingDate = '';
+}
+// 點背景關閉
+document.querySelectorAll('.modal-bg').forEach(el => {
+  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open'); });
+});
+
+// 初始載入：確認是否已登入
+(async () => {
+  const r = await api('GET', '/api/me').catch(()=>null);
+  if (r && r.id) {
+    currentUser = r;
+    document.getElementById('login-page').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('fab-add').style.display='flex';
+    document.getElementById('topbar-user').textContent = r.name + '　' + (r.role==='admin'?'👑 管理者':'業務員');
+    loadToday();
+  }
+})();
+</script>
+</body>
+</html>
