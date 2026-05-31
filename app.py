@@ -50,6 +50,10 @@ def init_db():
             called_at TIMESTAMP DEFAULT NOW()
         );
     ''')
+    # 新增欄位（若已存在則跳過）
+    cur.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS intent_grade TEXT DEFAULT ''")
+    cur.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS dnc BOOLEAN DEFAULT FALSE")
+    cur.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS follow_date TEXT DEFAULT ''")
     pw_admin = hashlib.sha256('admin1234'.encode()).hexdigest()
     pw_sales = hashlib.sha256('sales1234'.encode()).hexdigest()
     try:
@@ -92,6 +96,7 @@ def get_today_clients(user_id, role):
             FROM clients c
             LEFT JOIN users u ON c.assigned_to = u.id
             WHERE c.status NOT IN ('拒絕','黑名單')
+            AND (c.dnc IS NULL OR c.dnc = FALSE)
             AND (c.next_follow = '' OR c.next_follow <= %s)
             ORDER BY c.next_follow ASC, c.created_at ASC
             LIMIT 50
@@ -103,6 +108,7 @@ def get_today_clients(user_id, role):
             LEFT JOIN users u ON c.assigned_to = u.id
             WHERE c.assigned_to = %s
             AND c.status NOT IN ('拒絕','黑名單')
+            AND (c.dnc IS NULL OR c.dnc = FALSE)
             AND (c.next_follow = '' OR c.next_follow <= %s)
             ORDER BY c.next_follow ASC, c.created_at ASC
             LIMIT 50
@@ -187,10 +193,11 @@ def today():
 @login_required
 def record_call():
     d = request.json or {}
-    client_id = d.get('client_id')
-    result    = d.get('result')
-    note      = d.get('note', '')
-    next_date = d.get('next_date', '')
+    client_id    = d.get('client_id')
+    result       = d.get('result')
+    note         = d.get('note', '')
+    next_date    = d.get('next_date', '')
+    intent_grade = d.get('intent_grade', '')
 
     if not client_id or not result:
         return jsonify({'error': '缺少必要欄位'}), 400
@@ -219,10 +226,24 @@ def record_call():
     new_status = status_map.get(result, '追蹤中')
     new_next   = next_date if next_date else next_map.get(result, '')
 
-    cur.execute('''UPDATE clients
-                  SET status=%s, next_follow=%s, updated_at=%s
-                  WHERE id=%s''',
-               (new_status, new_next, now_str(), client_id))
+    # D級自動標 DNC
+    dnc_val = True if intent_grade == 'D' else None
+
+    if intent_grade and dnc_val is not None:
+        cur.execute('''UPDATE clients
+                      SET status=%s, next_follow=%s, intent_grade=%s, dnc=%s, updated_at=%s
+                      WHERE id=%s''',
+                   (new_status, new_next, intent_grade, dnc_val, now_str(), client_id))
+    elif intent_grade:
+        cur.execute('''UPDATE clients
+                      SET status=%s, next_follow=%s, intent_grade=%s, updated_at=%s
+                      WHERE id=%s''',
+                   (new_status, new_next, intent_grade, now_str(), client_id))
+    else:
+        cur.execute('''UPDATE clients
+                      SET status=%s, next_follow=%s, updated_at=%s
+                      WHERE id=%s''',
+                   (new_status, new_next, now_str(), client_id))
     conn.commit()
     cur.close()
     conn.close()
@@ -235,6 +256,7 @@ def clients():
     q      = request.args.get('q', '')
     type_  = request.args.get('type', '')
     status = request.args.get('status', '')
+    grade  = request.args.get('grade', '')
     page   = int(request.args.get('page', 1))
     limit  = 20
     offset = (page-1)*limit
@@ -256,6 +278,9 @@ def clients():
     if status:
         conds.append('c.status = %s')
         params.append(status)
+    if grade:
+        conds.append('c.intent_grade = %s')
+        params.append(grade)
 
     where = ('WHERE ' + ' AND '.join(conds)) if conds else ''
     cur.execute(f'SELECT COUNT(*) FROM clients c {where}', params)
@@ -316,14 +341,34 @@ def update_client(cid):
     d = request.json or {}
     conn = get_db()
     cur = conn.cursor()
+    intent_grade = d.get('intent_grade', '')
+    dnc = True if intent_grade == 'D' else bool(d.get('dnc', False))
     cur.execute('''UPDATE clients
                   SET name=%s,phone=%s,type=%s,source=%s,region=%s,note=%s,
-                      assigned_to=%s,next_follow=%s,updated_at=%s
+                      assigned_to=%s,next_follow=%s,intent_grade=%s,dnc=%s,updated_at=%s
                   WHERE id=%s''',
                (d.get('name'), d.get('phone'), d.get('type','待分類'),
                 d.get('source',''), d.get('region',''), d.get('note',''),
                 d.get('assigned_to',0), d.get('next_follow',''),
-                now_str(), cid))
+                intent_grade, dnc, now_str(), cid))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'ok': True})
+
+@app.route('/api/clients/<int:cid>/grade', methods=['PATCH'])
+@login_required
+def set_grade(cid):
+    d = request.json or {}
+    grade = d.get('intent_grade', '')
+    follow_date = d.get('follow_date', '')
+    dnc = True if grade == 'D' else False
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''UPDATE clients
+                  SET intent_grade=%s, dnc=%s, follow_date=%s, updated_at=%s
+                  WHERE id=%s''',
+               (grade, dnc, follow_date, now_str(), cid))
     conn.commit()
     cur.close()
     conn.close()

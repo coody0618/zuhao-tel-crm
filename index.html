@@ -92,6 +92,35 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,'Noto Sans 
 .badge-借款人{background:var(--purple-bg);color:var(--purple);}
 .badge-金主{background:var(--green-bg);color:var(--green);}
 
+/* 意向分級 */
+.grade-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:800;
+  flex-shrink:0;
+}
+.grade-A{background:#D1FAE5;color:#047857;}
+.grade-B{background:#DBEAFE;color:#1D4ED8;}
+.grade-C{background:#F3F4F6;color:#6B7280;}
+.grade-D{background:#FEE2E2;color:#B91C1C;}
+.grade-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--border);border-top:1px solid var(--border);
+}
+.grade-btn{
+  padding:10px 4px;border:none;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  font-family:inherit;transition:all .1s;background:var(--card);
+}
+.grade-btn:active{filter:brightness(0.92);}
+.grade-btn-label{font-size:10px;font-weight:600;color:var(--muted);}
+.grade-btn.selected{outline:2px solid var(--gold);}
+/* DNC 警示 */
+.dnc-banner{
+  background:#FEE2E2;color:#B91C1C;
+  padding:6px 16px;font-size:12px;font-weight:700;
+  letter-spacing:0.5px;text-align:center;
+}
+
 /* 撥打按鈕 */
 .call-btn{
   width:100%;padding:14px;
@@ -382,6 +411,28 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,'Noto Sans 
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title" id="note-modal-title">記錄通話結果</div>
+    <!-- 分級選擇 -->
+    <div class="form-group">
+      <label class="form-label">意向分級（選填）</label>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">
+        <button class="grade-btn" id="gb-A" onclick="selectGrade('A')" style="border-radius:10px;border:2px solid var(--border);">
+          <span class="grade-badge grade-A">A</span>
+          <span class="grade-btn-label">意向強</span>
+        </button>
+        <button class="grade-btn" id="gb-B" onclick="selectGrade('B')" style="border-radius:10px;border:2px solid var(--border);">
+          <span class="grade-badge grade-B">B</span>
+          <span class="grade-btn-label">有興趣</span>
+        </button>
+        <button class="grade-btn" id="gb-C" onclick="selectGrade('C')" style="border-radius:10px;border:2px solid var(--border);">
+          <span class="grade-badge grade-C">C</span>
+          <span class="grade-btn-label">無需求</span>
+        </button>
+        <button class="grade-btn" id="gb-D" onclick="selectGrade('D')" style="border-radius:10px;border:2px solid var(--border);">
+          <span class="grade-badge grade-D">D</span>
+          <span class="grade-btn-label">勿再打</span>
+        </button>
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">備注（選填）</label>
       <textarea class="form-textarea" id="note-text" placeholder="例：有房子需要100萬，下週再打…"></textarea>
@@ -550,18 +601,24 @@ async function loadToday() {
   list.innerHTML = r.clients.map(c => clientCard(c)).join('');
 }
 
+function gradeLabel(g){ return {A:'意向強',B:'有興趣',C:'無需求',D:'勿再打'}[g]||''; }
+
 function clientCard(c) {
   const badge = `<span class="client-badge badge-${c.status}">${c.status}</span>`;
   const typeBadge = c.type !== '待分類' ? `<span class="client-badge badge-${c.type}" style="margin-left:6px;">${c.type}</span>` : '';
-  const meta = [c.region, c.source, c.next_follow ? '📅 ' + c.next_follow : ''].filter(Boolean).join('　');
+  const gradeBadge = c.intent_grade ? `<span class="grade-badge grade-${c.intent_grade}" style="margin-left:6px;" title="${gradeLabel(c.intent_grade)}">${c.intent_grade}</span>` : '';
+  const followShow = c.next_follow ? '📅 ' + c.next_follow : '';
+  const meta = [c.region, c.source, followShow].filter(Boolean).join('　');
+  const dncBanner = c.dnc ? `<div class="dnc-banner">🚫 勿再聯繫</div>` : '';
   return `
   <div class="client-card">
+    ${dncBanner}
     <div class="client-card-header">
       <div>
         <div class="client-name">${c.name}</div>
         <div class="client-phone">${c.phone}</div>
         ${meta ? `<div class="client-meta">${meta}</div>` : ''}
-        <div style="margin-top:6px;">${badge}${typeBadge}</div>
+        <div style="margin-top:6px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${badge}${typeBadge}${gradeBadge}</div>
       </div>
       <div style="text-align:right;display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
         <button class="btn btn-sm" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;" onclick="openDetail(${c.id})">詳情</button>
@@ -603,9 +660,27 @@ function makeCall(phone, id) {
   window.location.href = 'tel:' + phone.replace(/-/g,'');
 }
 
+let pendingGrade = '';
+function selectGrade(g) {
+  pendingGrade = pendingGrade === g ? '' : g;
+  ['A','B','C','D'].forEach(x => {
+    const btn = document.getElementById('gb-'+x);
+    if (btn) btn.style.borderColor = x === pendingGrade ? 'var(--gold)' : 'var(--border)';
+  });
+}
+
+function resetGrade() {
+  pendingGrade = '';
+  ['A','B','C','D'].forEach(x => {
+    const btn = document.getElementById('gb-'+x);
+    if (btn) btn.style.borderColor = 'var(--border)';
+  });
+}
+
 function selectResult(clientId, result) {
   pendingClientId = clientId;
   pendingResult   = result;
+  resetGrade();
   if (result === '約回電' || result === '再跟進') {
     // 需要選日期
     const today = new Date();
@@ -650,8 +725,15 @@ async function confirmDate2() {
 
 async function confirmResult() {
   const note = document.getElementById('note-text').value;
-  const data = { client_id: pendingClientId, result: pendingResult, note, next_date: window._pendingDate||'' };
+  const data = {
+    client_id: pendingClientId,
+    result: pendingResult,
+    note,
+    next_date: window._pendingDate||'',
+    intent_grade: pendingGrade
+  };
   window._pendingDate = '';
+  resetGrade();
   closeModal('note-modal');
   await api('POST', '/api/call', data);
   await loadToday();
@@ -674,10 +756,13 @@ async function loadClients() {
   clientsTotal = r.total;
   const list = document.getElementById('clients-list');
   const html = r.clients.map(c => `
-    <div class="list-item" onclick="openDetail(${c.id})">
+    <div class="list-item" onclick="openDetail(${c.id})" style="${c.dnc ? 'opacity:0.6;' : ''}">
       <div class="list-row">
-        <div class="list-name">${c.name}</div>
-        <span class="client-badge badge-${c.status}" style="font-size:10px;">${c.status}</span>
+        <div class="list-name">${c.name}${c.dnc ? ' 🚫' : ''}</div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          ${c.intent_grade ? `<span class="grade-badge grade-${c.intent_grade}">${c.intent_grade}</span>` : ''}
+          <span class="client-badge badge-${c.status}" style="font-size:10px;">${c.status}</span>
+        </div>
       </div>
       <div class="list-phone">${c.phone}</div>
       <div class="list-meta">
@@ -710,11 +795,56 @@ async function openDetail(id) {
     '未接':'var(--amber-bg)','再跟進':'var(--purple-bg)',
     '拒絕':'var(--red-bg)','黑名單':'var(--gray-bg)'
   };
+  const gradeColors = {A:'var(--green-bg)',B:'var(--blue-bg)',C:'var(--gray-bg)',D:'var(--red-bg)'};
+  const gradeTextColors = {A:'var(--green)',B:'var(--blue)',C:'var(--gray)',D:'var(--red)'};
+  const grades = ['A','B','C','D'];
+  const gradeLabels = {A:'意向強',B:'有興趣',C:'無需求',D:'勿再打'};
+
   document.getElementById('detail-content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div class="modal-title" style="margin-bottom:0;">${c.name}</div>
+      <div class="modal-title" style="margin-bottom:0;">${c.name}${c.dnc ? ' <span style="color:var(--red);font-size:14px;">🚫</span>' : ''}</div>
       <button class="btn btn-sm btn-primary" onclick="closeModal('detail-modal')" style="width:auto;">關閉</button>
     </div>
+
+    <!-- 分級快選 -->
+    <div style="background:var(--bg);border-radius:12px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">意向分級</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+        ${grades.map(g=>`
+          <button onclick="quickSetGrade(${c.id},'${g}')" style="
+            padding:8px 4px;border-radius:10px;border:2px solid ${c.intent_grade===g ? 'var(--gold)' : 'var(--border)'};
+            background:${c.intent_grade===g ? gradeColors['${g}'] : 'var(--card)'};
+            cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <span class="grade-badge grade-${g}">${g}</span>
+            <span style="font-size:10px;color:var(--muted);">${gradeLabels['${g}']}</span>
+          </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- 跟進日期 -->
+    <div style="background:var(--bg);border-radius:12px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">跟進日期</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="date" id="detail-follow-date" value="${c.next_follow||''}"
+          style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;background:var(--card);">
+        <button onclick="quickSetFollowDate(${c.id})" class="btn btn-sm" style="width:auto;background:var(--navy);color:var(--gold);padding:8px 14px;">設定</button>
+      </div>
+    </div>
+
+    <!-- 勿再聯繫 -->
+    <div style="background:${c.dnc ? 'var(--red-bg)' : 'var(--bg)'};border-radius:12px;padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${c.dnc ? 'var(--red)' : 'var(--text)'};">🚫 勿再聯繫</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">標記後不出現在今日名單</div>
+      </div>
+      <button onclick="toggleDNC(${c.id},${c.dnc})" style="
+        padding:8px 16px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;
+        background:${c.dnc ? 'var(--red)' : 'var(--gray-bg)'};color:${c.dnc ? 'white' : 'var(--muted)'};">
+        ${c.dnc ? '已標記' : '標記'}
+      </button>
+    </div>
+
+    <!-- 基本資料 -->
     <div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
         <div><span style="color:var(--muted);">電話　</span><strong>${c.phone}</strong></div>
@@ -722,10 +852,10 @@ async function openDetail(id) {
         <div><span style="color:var(--muted);">狀態　</span><strong>${c.status}</strong></div>
         <div><span style="color:var(--muted);">地區　</span><strong>${c.region||'—'}</strong></div>
         <div><span style="color:var(--muted);">來源　</span><strong>${c.source||'—'}</strong></div>
-        <div><span style="color:var(--muted);">下次　</span><strong>${c.next_follow||'—'}</strong></div>
       </div>
       ${c.note ? `<div style="margin-top:10px;font-size:13px;color:var(--muted);">備注：${c.note}</div>` : ''}
     </div>
+
     <button class="btn" style="background:var(--navy);color:var(--gold);margin-bottom:14px;" onclick="makeCall('${c.phone}',${c.id})">📞 撥打 ${c.phone}</button>
     <div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">通話記錄（${calls.length}）</div>
     ${calls.length ? calls.map(cl=>`
@@ -738,146 +868,11 @@ async function openDetail(id) {
   document.getElementById('detail-modal').classList.add('open');
 }
 
-// ════════════════════════════════════════════════
-// 新增客戶
-// ════════════════════════════════════════════════
-function openAddModal() {
-  ['add-name','add-phone','add-region','add-note'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('add-modal').classList.add('open');
-}
-async function submitAdd() {
-  const name  = document.getElementById('add-name').value.trim();
-  const phone = document.getElementById('add-phone').value.trim();
-  if (!name||!phone) { alert('請填寫姓名和電話'); return; }
-  await api('POST','/api/clients',{
-    name, phone,
-    type:   document.getElementById('add-type').value,
-    source: document.getElementById('add-source').value,
-    region: document.getElementById('add-region').value,
-    note:   document.getElementById('add-note').value,
-  });
-  closeModal('add-modal');
-  loadClients();
+async function quickSetGrade(id, grade) {
+  await api('PATCH', `/api/clients/${id}/grade`, { intent_grade: grade });
+  openDetail(id);  // 重新載入詳情
+  if (document.getElementById('today-list')) loadToday();
 }
 
-// ════════════════════════════════════════════════
-// CSV 匯入
-// ════════════════════════════════════════════════
-async function submitImport() {
-  const f = document.getElementById('csv-file').files[0];
-  if (!f) { alert('請選擇 CSV 檔案'); return; }
-  const fd = new FormData();
-  fd.append('file', f);
-  const r = await fetch('/api/import', { method:'POST', body:fd, credentials:'include' });
-  const d = await r.json();
-  closeModal('import-modal');
-  alert(`匯入完成：${d.count} 筆`);
-  loadClients();
-}
-
-// ════════════════════════════════════════════════
-// 業績統計
-// ════════════════════════════════════════════════
-async function loadStats() {
-  const r = await api('GET', '/api/stats');
-  const s = r.stats;
-  const daily = r.daily;
-  const ranking = r.ranking;
-  const maxTotal = Math.max(...daily.map(d=>d.total), 1);
-
-  const rankHTML = ranking.length ? ranking.map((u,i)=>`
-    <div class="rank-item">
-      <div class="rank-num">${i+1}</div>
-      <div class="rank-name">${u.name}</div>
-      <div class="rank-nums">
-        撥打 ${u.total}　接通 ${u.reach}　有興趣 ${u.interested}
-      </div>
-    </div>`).join('') : '';
-
-  document.getElementById('stats-content').innerHTML = `
-    <div class="stats-section">
-      <div class="stats-section-title">今日</div>
-      <div class="stats-card">
-        <div class="stats-row">
-          <div><div class="stats-num" style="color:var(--navy);">${s.today.total}</div><div class="stats-sub">已撥通</div></div>
-          <div><div class="stats-num" style="color:var(--gold);">${s.today.reach}</div><div class="stats-sub">接通</div></div>
-          <div><div class="stats-num" style="color:var(--green);">${s.today.interested}</div><div class="stats-sub">有興趣</div></div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);">
-          接通率 ${s.today.total ? Math.round(s.today.reach/s.today.total*100) : 0}%　
-          約訪 ${s.today.booked} 通
-        </div>
-      </div>
-    </div>
-
-    <div class="stats-section">
-      <div class="stats-section-title">本週</div>
-      <div class="stats-card">
-        <div class="stats-row">
-          <div><div class="stats-num">${s.week.total}</div><div class="stats-sub">已撥通</div></div>
-          <div><div class="stats-num" style="color:var(--gold);">${s.week.reach}</div><div class="stats-sub">接通</div></div>
-          <div><div class="stats-num" style="color:var(--green);">${s.week.interested}</div><div class="stats-sub">有興趣</div></div>
-        </div>
-        <div class="bar-chart">
-          ${daily.map(d=>`
-            <div class="bar-wrap">
-              <div style="position:relative;flex:1;width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;">
-                <div class="bar" style="height:${Math.round((d.reach/maxTotal)*70)}px;background:var(--gold);"></div>
-                <div class="bar" style="height:${Math.round(((d.total-d.reach)/maxTotal)*70)}px;"></div>
-              </div>
-              <div class="bar-date">${d.date.slice(5)}</div>
-            </div>`).join('')}
-        </div>
-        <div class="bar-legend">
-          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
-            <div class="legend-dot" style="background:var(--navy);"></div>未接
-          </div>
-          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);">
-            <div class="legend-dot" style="background:var(--gold);"></div>接通
-          </div>
-        </div>
-      </div>
-    </div>
-
-    ${ranking.length ? `
-    <div class="stats-section">
-      <div class="stats-section-title">今日團隊排行</div>
-      <div class="stats-card">${rankHTML}</div>
-    </div>` : ''}
-
-    <div style="text-align:center;padding:8px 0;">
-      <button class="btn btn-sm" style="background:var(--navy);color:var(--gold);width:auto;" onclick="openModal('import-modal')">
-        📥 匯入 CSV 名單
-      </button>
-    </div>
-  `;
-}
-
-// ════════════════════════════════════════════════
-// 工具
-// ════════════════════════════════════════════════
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) {
-  document.getElementById(id)?.classList.remove('open');
-  pendingResult = null; pendingClientId = null; window._pendingDate = '';
-}
-// 點背景關閉
-document.querySelectorAll('.modal-bg').forEach(el => {
-  el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open'); });
-});
-
-// 初始載入：確認是否已登入
-(async () => {
-  const r = await api('GET', '/api/me').catch(()=>null);
-  if (r && r.id) {
-    currentUser = r;
-    document.getElementById('login-page').style.display='none';
-    document.getElementById('app').style.display='flex';
-    document.getElementById('fab-add').style.display='flex';
-    document.getElementById('topbar-user').textContent = r.name + '　' + (r.role==='admin'?'👑 管理者':'業務員');
-    loadToday();
-  }
-})();
-</script>
-</body>
-</html>
+async function quickSetFollowDate(id) {
+  const d = document.getElementById('de
