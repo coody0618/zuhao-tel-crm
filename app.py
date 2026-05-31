@@ -1,34 +1,34 @@
-import os, json, sqlite3, hashlib, secrets
+import os, json, hashlib, secrets
 from datetime import datetime, date, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, session, send_from_directory
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# ── 資料路徑 ─────────────────────────────────────
-BASE = '/data' if os.path.isdir('/data') else os.path.dirname(os.path.abspath(__file__))
-DB   = os.path.join(BASE, 'tel_crm.db')
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# ── 資料庫初始化 ──────────────────────────────────
+# ── 資料庫連線 ────────────────────────────────────
 def get_db():
-    db = sqlite3.connect(DB)
-    db.row_factory = sqlite3.Row
-    return db
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
 
 def init_db():
-    db = get_db()
-    db.executescript('''
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             name TEXT NOT NULL,
             role TEXT DEFAULT 'sales',
-            created_at TEXT DEFAULT (datetime('now','localtime'))
+            created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
             type TEXT DEFAULT '待分類',
@@ -38,34 +38,34 @@ def init_db():
             status TEXT DEFAULT '新客戶',
             next_follow TEXT DEFAULT '',
             assigned_to INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now','localtime')),
-            updated_at TEXT DEFAULT (datetime('now','localtime'))
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS calls (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             client_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             result TEXT NOT NULL,
             note TEXT DEFAULT '',
-            called_at TEXT DEFAULT (datetime('now','localtime'))
+            called_at TIMESTAMP DEFAULT NOW()
         );
     ''')
-    # 預設帳號
-    pw_admin  = hashlib.sha256('admin1234'.encode()).hexdigest()
-    pw_sales  = hashlib.sha256('sales1234'.encode()).hexdigest()
+    pw_admin = hashlib.sha256('admin1234'.encode()).hexdigest()
+    pw_sales = hashlib.sha256('sales1234'.encode()).hexdigest()
     try:
-        db.execute("INSERT INTO users(username,password,name,role) VALUES(?,?,?,?)",
-                   ('admin', pw_admin, '睏足爸', 'admin'))
-        db.execute("INSERT INTO users(username,password,name,role) VALUES(?,?,?,?)",
-                   ('sales1', pw_sales, '業務員1', 'sales'))
-        db.execute("INSERT INTO users(username,password,name,role) VALUES(?,?,?,?)",
-                   ('sales2', pw_sales, '業務員2', 'sales'))
-        db.execute("INSERT INTO users(username,password,name,role) VALUES(?,?,?,?)",
-                   ('sales3', pw_sales, '業務員3', 'sales'))
-        db.commit()
-    except:
-        pass
-    db.close()
+        cur.execute("INSERT INTO users(username,password,name,role) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    ('admin', pw_admin, '睏足爸', 'admin'))
+        cur.execute("INSERT INTO users(username,password,name,role) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    ('sales1', pw_sales, '業務員1', 'sales'))
+        cur.execute("INSERT INTO users(username,password,name,role) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    ('sales2', pw_sales, '業務員2', 'sales'))
+        cur.execute("INSERT INTO users(username,password,name,role) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    ('sales3', pw_sales, '業務員3', 'sales'))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+    cur.close()
+    conn.close()
 
 init_db()
 
@@ -83,30 +83,33 @@ def now_str():   return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 # ── 今日工作台邏輯 ────────────────────────────────
 def get_today_clients(user_id, role):
-    db = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     today = today_str()
     if role == 'admin':
-        rows = db.execute('''
+        cur.execute('''
             SELECT c.*, u.name as sales_name
             FROM clients c
             LEFT JOIN users u ON c.assigned_to = u.id
             WHERE c.status NOT IN ('拒絕','黑名單')
-            AND (c.next_follow = '' OR c.next_follow <= ?)
+            AND (c.next_follow = '' OR c.next_follow <= %s)
             ORDER BY c.next_follow ASC, c.created_at ASC
             LIMIT 50
-        ''', (today,)).fetchall()
+        ''', (today,))
     else:
-        rows = db.execute('''
+        cur.execute('''
             SELECT c.*, u.name as sales_name
             FROM clients c
             LEFT JOIN users u ON c.assigned_to = u.id
-            WHERE c.assigned_to = ?
+            WHERE c.assigned_to = %s
             AND c.status NOT IN ('拒絕','黑名單')
-            AND (c.next_follow = '' OR c.next_follow <= ?)
+            AND (c.next_follow = '' OR c.next_follow <= %s)
             ORDER BY c.next_follow ASC, c.created_at ASC
             LIMIT 50
-        ''', (user_id, today)).fetchall()
-    db.close()
+        ''', (user_id, today))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
     return [dict(r) for r in rows]
 
 # ═══════════════════════════════════════════════
@@ -117,10 +120,13 @@ def get_today_clients(user_id, role):
 def login():
     d = request.json or {}
     pw = hashlib.sha256(d.get('password','').encode()).hexdigest()
-    db = get_db()
-    user = db.execute('SELECT * FROM users WHERE username=? AND password=?',
-                      (d.get('username',''), pw)).fetchone()
-    db.close()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM users WHERE username=%s AND password=%s',
+                (d.get('username',''), pw))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
     if not user:
         return jsonify({'error': '帳號或密碼錯誤'}), 401
     session['user_id'] = user['id']
@@ -143,21 +149,29 @@ def me():
 @login_required
 def today():
     clients = get_today_clients(session['user_id'], session['role'])
-    db = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     t = today_str()
     uid = session['user_id']
     role = session['role']
 
     if role == 'admin':
-        total  = db.execute("SELECT COUNT(*) FROM calls WHERE date(called_at)=?", (t,)).fetchone()[0]
-        reach  = db.execute("SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result!='未接'", (t,)).fetchone()[0]
-        interested = db.execute("SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result='有興趣'", (t,)).fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date", (t,))
+        total = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result != '未接'", (t,))
+        reach = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result = '有興趣'", (t,))
+        interested = cur.fetchone()['count']
     else:
-        total  = db.execute("SELECT COUNT(*) FROM calls WHERE user_id=? AND date(called_at)=?", (uid,t)).fetchone()[0]
-        reach  = db.execute("SELECT COUNT(*) FROM calls WHERE user_id=? AND date(called_at)=? AND result!='未接'", (uid,t)).fetchone()[0]
-        interested = db.execute("SELECT COUNT(*) FROM calls WHERE user_id=? AND date(called_at)=? AND result='有興趣'", (uid,t)).fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM calls WHERE user_id=%s AND called_at::date = %s::date", (uid, t))
+        total = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) FROM calls WHERE user_id=%s AND called_at::date = %s::date AND result != '未接'", (uid, t))
+        reach = cur.fetchone()['count']
+        cur.execute("SELECT COUNT(*) FROM calls WHERE user_id=%s AND called_at::date = %s::date AND result = '有興趣'", (uid, t))
+        interested = cur.fetchone()['count']
 
-    db.close()
+    cur.close()
+    conn.close()
     return jsonify({
         'clients': clients,
         'stats': {
@@ -174,18 +188,18 @@ def today():
 def record_call():
     d = request.json or {}
     client_id = d.get('client_id')
-    result    = d.get('result')   # 有興趣/約回電/未接/再跟進/拒絕/黑名單
+    result    = d.get('result')
     note      = d.get('note', '')
     next_date = d.get('next_date', '')
 
     if not client_id or not result:
         return jsonify({'error': '缺少必要欄位'}), 400
 
-    db = get_db()
-    db.execute('INSERT INTO calls(client_id,user_id,result,note) VALUES(?,?,?,?)',
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO calls(client_id,user_id,result,note) VALUES(%s,%s,%s,%s)',
                (client_id, session['user_id'], result, note))
 
-    # 狀態與下次跟進邏輯
     tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
     in30days  = (date.today() + timedelta(days=30)).strftime('%Y-%m-%d')
 
@@ -205,12 +219,13 @@ def record_call():
     new_status = status_map.get(result, '追蹤中')
     new_next   = next_date if next_date else next_map.get(result, '')
 
-    db.execute('''UPDATE clients
-                  SET status=?, next_follow=?, updated_at=?
-                  WHERE id=?''',
+    cur.execute('''UPDATE clients
+                  SET status=%s, next_follow=%s, updated_at=%s
+                  WHERE id=%s''',
                (new_status, new_next, now_str(), client_id))
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close()
+    conn.close()
     return jsonify({'ok': True})
 
 # ── 客戶名單 ───────────────────────────────────────
@@ -224,34 +239,38 @@ def clients():
     limit  = 20
     offset = (page-1)*limit
 
-    db = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     conds = []
     params = []
 
     if session['role'] != 'admin':
-        conds.append('c.assigned_to = ?')
+        conds.append('c.assigned_to = %s')
         params.append(session['user_id'])
     if q:
-        conds.append('(c.name LIKE ? OR c.phone LIKE ?)')
+        conds.append('(c.name LIKE %s OR c.phone LIKE %s)')
         params += [f'%{q}%', f'%{q}%']
     if type_:
-        conds.append('c.type = ?')
+        conds.append('c.type = %s')
         params.append(type_)
     if status:
-        conds.append('c.status = ?')
+        conds.append('c.status = %s')
         params.append(status)
 
     where = ('WHERE ' + ' AND '.join(conds)) if conds else ''
-    total = db.execute(f'SELECT COUNT(*) FROM clients c {where}', params).fetchone()[0]
-    rows  = db.execute(f'''
+    cur.execute(f'SELECT COUNT(*) FROM clients c {where}', params)
+    total = cur.fetchone()['count']
+    cur.execute(f'''
         SELECT c.*, u.name as sales_name
         FROM clients c
         LEFT JOIN users u ON c.assigned_to = u.id
         {where}
         ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?
-    ''', params+[limit, offset]).fetchall()
-    db.close()
+        LIMIT %s OFFSET %s
+    ''', params+[limit, offset])
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
     return jsonify({'clients': [dict(r) for r in rows], 'total': total, 'page': page})
 
 @app.route('/api/clients', methods=['POST'])
@@ -260,28 +279,34 @@ def add_client():
     d = request.json or {}
     if not d.get('name') or not d.get('phone'):
         return jsonify({'error': '姓名和電話為必填'}), 400
-    db = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     assigned = d.get('assigned_to') or session['user_id']
-    db.execute('''INSERT INTO clients(name,phone,type,source,region,note,assigned_to)
-                  VALUES(?,?,?,?,?,?,?)''',
+    cur.execute('''INSERT INTO clients(name,phone,type,source,region,note,assigned_to)
+                  VALUES(%s,%s,%s,%s,%s,%s,%s)''',
                (d['name'], d['phone'],
                 d.get('type','待分類'), d.get('source',''),
                 d.get('region',''), d.get('note',''), assigned))
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close()
+    conn.close()
     return jsonify({'ok': True})
 
 @app.route('/api/clients/<int:cid>')
 @login_required
 def get_client(cid):
-    db = get_db()
-    c  = db.execute('SELECT * FROM clients WHERE id=?', (cid,)).fetchone()
-    calls = db.execute('''
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM clients WHERE id=%s', (cid,))
+    c = cur.fetchone()
+    cur.execute('''
         SELECT cl.*, u.name as sales_name
         FROM calls cl LEFT JOIN users u ON cl.user_id=u.id
-        WHERE cl.client_id=? ORDER BY cl.called_at DESC
-    ''', (cid,)).fetchall()
-    db.close()
+        WHERE cl.client_id=%s ORDER BY cl.called_at DESC
+    ''', (cid,))
+    calls = cur.fetchall()
+    cur.close()
+    conn.close()
     if not c: return jsonify({'error': '找不到'}), 404
     return jsonify({'client': dict(c), 'calls': [dict(r) for r in calls]})
 
@@ -289,17 +314,19 @@ def get_client(cid):
 @login_required
 def update_client(cid):
     d = request.json or {}
-    db = get_db()
-    db.execute('''UPDATE clients
-                  SET name=?,phone=?,type=?,source=?,region=?,note=?,
-                      assigned_to=?,next_follow=?,updated_at=?
-                  WHERE id=?''',
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''UPDATE clients
+                  SET name=%s,phone=%s,type=%s,source=%s,region=%s,note=%s,
+                      assigned_to=%s,next_follow=%s,updated_at=%s
+                  WHERE id=%s''',
                (d.get('name'), d.get('phone'), d.get('type','待分類'),
                 d.get('source',''), d.get('region',''), d.get('note',''),
                 d.get('assigned_to',0), d.get('next_follow',''),
                 now_str(), cid))
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close()
+    conn.close()
     return jsonify({'ok': True})
 
 # ── CSV 匯入 ───────────────────────────────────────
@@ -311,14 +338,15 @@ def import_csv():
     if not f: return jsonify({'error': '請選擇 CSV 檔案'}), 400
     content = f.read().decode('utf-8-sig')
     reader  = csv.DictReader(io.StringIO(content))
-    db = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     count = 0
     for row in reader:
         name  = row.get('姓名','').strip() or row.get('name','').strip()
         phone = row.get('電話','').strip() or row.get('phone','').strip()
         if name and phone:
-            db.execute('''INSERT INTO clients(name,phone,type,source,region,note,assigned_to)
-                          VALUES(?,?,?,?,?,?,?)''',
+            cur.execute('''INSERT INTO clients(name,phone,type,source,region,note,assigned_to)
+                          VALUES(%s,%s,%s,%s,%s,%s,%s)''',
                        (name, phone,
                         row.get('類型','待分類').strip(),
                         row.get('來源','').strip(),
@@ -326,68 +354,70 @@ def import_csv():
                         row.get('備注','').strip(),
                         session['user_id']))
             count += 1
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close()
+    conn.close()
     return jsonify({'ok': True, 'count': count})
 
 # ── 業績統計 ───────────────────────────────────────
 @app.route('/api/stats')
 @login_required
 def stats():
-    db  = get_db()
+    conn = get_db()
+    cur = conn.cursor()
     uid = session['user_id']
-    role= session['role']
+    role = session['role']
     today = today_str()
     week_start = (date.today() - timedelta(days=date.today().weekday())).strftime('%Y-%m-%d')
 
     def q(sql, params=()):
-        return db.execute(sql, params).fetchone()[0]
+        cur.execute(sql, params)
+        return cur.fetchone()['count']
 
     if role == 'admin':
         p = ()
         filter_u = ''
     else:
         p = (uid,)
-        filter_u = 'AND user_id = ?'
+        filter_u = 'AND user_id = %s'
 
     stats_data = {
         'today': {
-            'total':   q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? {filter_u}", (today,)+p),
-            'reach':   q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result!='未接' {filter_u}", (today,)+p),
-            'interested': q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result='有興趣' {filter_u}", (today,)+p),
-            'booked':  q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result='約回電' {filter_u}", (today,)+p),
+            'total':      q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date {filter_u}", (today,)+p),
+            'reach':      q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result != '未接' {filter_u}", (today,)+p),
+            'interested': q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result = '有興趣' {filter_u}", (today,)+p),
+            'booked':     q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result = '約回電' {filter_u}", (today,)+p),
         },
         'week': {
-            'total':   q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)>=? {filter_u}", (week_start,)+p),
-            'reach':   q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)>=? AND result!='未接' {filter_u}", (week_start,)+p),
-            'interested': q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)>=? AND result='有興趣' {filter_u}", (week_start,)+p),
+            'total':      q(f"SELECT COUNT(*) FROM calls WHERE called_at::date >= %s::date {filter_u}", (week_start,)+p),
+            'reach':      q(f"SELECT COUNT(*) FROM calls WHERE called_at::date >= %s::date AND result != '未接' {filter_u}", (week_start,)+p),
+            'interested': q(f"SELECT COUNT(*) FROM calls WHERE called_at::date >= %s::date AND result = '有興趣' {filter_u}", (week_start,)+p),
         }
     }
 
-    # 七天每日數據
     daily = []
     for i in range(6, -1, -1):
         d = (date.today() - timedelta(days=i)).strftime('%Y-%m-%d')
-        t = q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? {filter_u}", (d,)+p)
-        r = q(f"SELECT COUNT(*) FROM calls WHERE date(called_at)=? AND result!='未接' {filter_u}", (d,)+p)
+        t = q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date {filter_u}", (d,)+p)
+        r = q(f"SELECT COUNT(*) FROM calls WHERE called_at::date = %s::date AND result != '未接' {filter_u}", (d,)+p)
         daily.append({'date': d, 'total': t, 'reach': r})
 
-    # 團隊排行（管理者看）
     ranking = []
     if role == 'admin':
-        rows = db.execute('''
+        cur.execute('''
             SELECT u.name, COUNT(c.id) as total,
-                   SUM(CASE WHEN c.result!='未接' THEN 1 ELSE 0 END) as reach,
-                   SUM(CASE WHEN c.result='有興趣' THEN 1 ELSE 0 END) as interested
+                   SUM(CASE WHEN c.result != '未接' THEN 1 ELSE 0 END) as reach,
+                   SUM(CASE WHEN c.result = '有興趣' THEN 1 ELSE 0 END) as interested
             FROM users u
-            LEFT JOIN calls c ON c.user_id=u.id AND date(c.called_at)=?
+            LEFT JOIN calls c ON c.user_id=u.id AND c.called_at::date = %s::date
             WHERE u.role='sales'
-            GROUP BY u.id
+            GROUP BY u.id, u.name
             ORDER BY total DESC
-        ''', (today,)).fetchall()
-        ranking = [dict(r) for r in rows]
+        ''', (today,))
+        ranking = [dict(r) for r in cur.fetchall()]
 
-    db.close()
+    cur.close()
+    conn.close()
     return jsonify({'stats': stats_data, 'daily': daily, 'ranking': ranking})
 
 # ── 業務員列表（管理者用）────────────────────────────
@@ -395,17 +425,4 @@ def stats():
 @login_required
 def users():
     if session['role'] != 'admin':
-        return jsonify({'error': '權限不足'}), 403
-    db = get_db()
-    rows = db.execute("SELECT id,username,name,role FROM users ORDER BY id").fetchall()
-    db.close()
-    return jsonify({'users': [dict(r) for r in rows]})
-
-# ── 主頁（Single Page App）──────────────────────────
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def index(path):
-    return send_from_directory('.', 'index.html')
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+        return jsonify(
